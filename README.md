@@ -2,6 +2,11 @@
 
 An extension supporting more streamlined prompt queue management.
 
+> **Private fork.** Based on upstream v0.2.1, with FIFO/LIFO submit mode, grouping by
+> model/LoRA, queue inversion, queued/finished timestamps, a running timer with an
+> estimate, opening outputs with the default player and deleting a job together with
+> its files. See [FORK.md](FORK.md).
+
 ## Table of Contents
 - [Quickstart](#quickstart)
 - [Important](#important)

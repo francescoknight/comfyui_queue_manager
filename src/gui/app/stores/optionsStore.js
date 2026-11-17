@@ -12,6 +12,7 @@ export const useOptionsStore = create((set) => ({
   thumb_size: 150,
   cover_size: 50,
   show_gallery_ui: true,
+  submit_order: 'FIFO',
 
   /**
    * Set a single option within a category

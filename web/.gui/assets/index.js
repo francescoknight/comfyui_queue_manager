@@ -19216,12 +19216,43 @@ const createLucideIcon = (iconName, iconNode) => {
   Component.displayName = toPascalCase(iconName);
   return Component;
 };
-const __iconNode = [
+const __iconNode$2 = [
+  ["path", { d: "m3 16 4 4 4-4", key: "1co6wj" }],
+  ["path", { d: "M7 20V4", key: "1yoxec" }],
+  ["path", { d: "m21 8-4-4-4 4", key: "1c9v7m" }],
+  ["path", { d: "M17 4v16", key: "7dpous" }]
+];
+const ArrowDownUp = createLucideIcon("arrow-down-up", __iconNode$2);
+const __iconNode$1 = [
   ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }],
   ["circle", { cx: "12", cy: "5", r: "1", key: "gxeob9" }],
   ["circle", { cx: "12", cy: "19", r: "1", key: "lyex9k" }]
 ];
-const EllipsisVertical = createLucideIcon("ellipsis-vertical", __iconNode);
+const EllipsisVertical = createLucideIcon("ellipsis-vertical", __iconNode$1);
+const __iconNode = [
+  [
+    "path",
+    {
+      d: "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+      key: "zw3jo"
+    }
+  ],
+  [
+    "path",
+    {
+      d: "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+      key: "1wduqc"
+    }
+  ],
+  [
+    "path",
+    {
+      d: "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
+      key: "kqbvx6"
+    }
+  ]
+];
+const Layers = createLucideIcon("layers", __iconNode);
 const baseURL = "/";
 async function apiCall(endpoint, data, method = "POST") {
   const url = endpoint.startsWith("https://") || endpoint.startsWith("http://") ? endpoint : `${baseURL}${endpoint}`;
@@ -19305,6 +19336,9 @@ const QuizSharpIcon = createSvgIcon([/* @__PURE__ */ jsxRuntimeExports.jsx("path
 }, "0"), /* @__PURE__ */ jsxRuntimeExports.jsx("path", {
   d: "M6 2v16h16V2zm7.51 8.16c.41-.73 1.18-1.16 1.63-1.8.48-.68.21-1.94-1.14-1.94-.88 0-1.32.67-1.5 1.23l-1.37-.57C11.51 5.96 12.52 5 13.99 5c1.23 0 2.08.56 2.51 1.26.37.6.58 1.73.01 2.57-.63.93-1.23 1.21-1.56 1.81-.13.24-.18.4-.18 1.18h-1.52c.01-.41-.06-1.08.26-1.66m-.56 3.79c0-.59.47-1.04 1.05-1.04.59 0 1.04.45 1.04 1.04 0 .58-.44 1.05-1.04 1.05-.58 0-1.05-.47-1.05-1.05"
 }, "1")]);
+const SwapVertIcon = createSvgIcon(/* @__PURE__ */ jsxRuntimeExports.jsx("path", {
+  d: "M16 17.01V10h-2v7.01h-3L15 21l4-3.99zM9 3 5 6.99h3V14h2V6.99h3z"
+}));
 const createStoreImpl = (createState) => {
   let state;
   const listeners = /* @__PURE__ */ new Set();
@@ -19406,11 +19440,93 @@ const useAppStore = create((set) => ({
   setClientId: (clientId) => set((state) => ({ ...state, clientId })),
   setShiftDown: (shiftDown) => set((state) => ({ ...state, shiftDown }))
 }));
+const useOptionsStore = create((set) => ({
+  Basic: { ShowSelectionHints: true },
+  Completed: {
+    CoverThumbMode: "Cropped",
+    GridThumbMode: "Square Fit",
+    ListOrder: "Newest first"
+  },
+  Gallery: {},
+  thumb_mode: "cover",
+  thumb_size: 150,
+  cover_size: 50,
+  show_gallery_ui: true,
+  submit_order: "FIFO",
+  /**
+   * Set a single option within a category
+   */
+  setOption: (category, key, value) => set((state) => ({
+    ...state,
+    [category]: {
+      ...state[category],
+      [key]: value
+    }
+  })),
+  /**
+   * Set all options within a category
+   */
+  setOptionsCategory: (category, options) => set((state) => ({
+    ...state,
+    [category]: options
+  })),
+  /**
+   * Set all options
+   */
+  setAllOptions: (allOptions) => set(() => ({
+    ...allOptions
+  })),
+  /**
+   * Set a single option directly on the root state
+   */
+  setDirectOption: (key, value) => set((state) => ({
+    ...state,
+    [key]: value
+  }))
+}));
 function TopMenu() {
   const [uiState, setUiState] = reactExports.useState({
     menuOpen: false
   });
   const { openSplash } = reactExports.useContext(AppContext);
+  const submitOrder = useOptionsStore((state) => state.submit_order);
+  const setDirectOption = useOptionsStore((state) => state.setDirectOption);
+  const [orderInfo, setOrderInfo] = reactExports.useState(null);
+  async function toggleSubmitOrder() {
+    const next2 = submitOrder === "LIFO" ? "FIFO" : "LIFO";
+    setDirectOption("submit_order", next2);
+    try {
+      await apiCall("queue_manager/options", { key: "submit_order", value: next2 }, "POST");
+      setOrderInfo(next2 === "LIFO" ? "New jobs will now jump to the front of the queue." : "New jobs will now be appended at the end of the queue.");
+    } catch (e) {
+      setDirectOption("submit_order", submitOrder);
+      setOrderInfo("Could not change the submit order.");
+    }
+  }
+  async function optimizeOrder() {
+    setOrderInfo("Grouping jobs by model / LoRA...");
+    try {
+      const result = await apiCall("queue_manager/optimize", {}, "POST");
+      if (!result || !result.total) {
+        setOrderInfo("Nothing to group.");
+      } else if (!result.reordered) {
+        setOrderInfo(`Already grouped: ${result.total} job(s) in ${result.groups} group(s).`);
+      } else {
+        setOrderInfo(`${result.total} job(s) in ${result.groups} group(s) - model loads ${result.model_loads_before} -> ${result.model_loads_after}.`);
+      }
+    } catch (e) {
+      setOrderInfo("Grouping failed, see the console.");
+    }
+  }
+  async function invertQueue() {
+    setOrderInfo("Inverting the queue...");
+    try {
+      const result = await apiCall("queue_manager/invert", {}, "POST");
+      setOrderInfo(result?.moved ? `Queue inverted: ${result.moved} job(s).` : "Nothing to invert.");
+    } catch (e) {
+      setOrderInfo("Invert failed.");
+    }
+  }
   const menuRef = reactExports.useRef(null);
   const toggleRef = reactExports.useRef(null);
   function toggleMenu() {
@@ -19452,6 +19568,47 @@ function TopMenu() {
         ref: menuRef,
         className: "top-menu" + (uiState.menuOpen ? " open" : ""),
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "container", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: "button shiny-button",
+              onClick: toggleSubmitOrder,
+              title: "Where a newly queued job lands. FIFO: at the end of the queue. LIFO: at the front, so it runs next.",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowDownUp, {}),
+                " New jobs: ",
+                submitOrder === "LIFO" ? "LIFO (run first)" : "FIFO (run last)"
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: "button shiny-button",
+              onClick: optimizeOrder,
+              title: "Reorder the pending queue so jobs sharing the same models / LoRAs run back to back",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Layers, {}),
+                " Group by model / LoRA"
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: "button shiny-button",
+              onClick: invertQueue,
+              title: "Reverse the pending queue: the last job becomes the first",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SwapVertIcon, {}),
+                " Invert queue order"
+              ]
+            }
+          ),
+          orderInfo ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "0.75rem", opacity: 0.8, padding: "0.25rem 0.5rem", lineHeight: 1.3 }, children: orderInfo }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "button shiny-button", onClick: takeOver, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(AdsClickSharpIcon, {}),
             " Take over focus"
@@ -19617,6 +19774,15 @@ const useSelectionStore = create((set) => ({
     anchor: null
   }),
   click: (ids, id, modifiers) => set((state) => state.active && !state.rename ? selectRow(state.selected, state.anchor, ids, id, modifiers) : state)
+}));
+const FolderOpenIcon = createSvgIcon(/* @__PURE__ */ jsxRuntimeExports.jsx("path", {
+  d: "M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2m0 12H4V8h16z"
+}));
+const PlayCircleOutlineIcon = createSvgIcon(/* @__PURE__ */ jsxRuntimeExports.jsx("path", {
+  d: "m10 16.5 6-4.5-6-4.5zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8"
+}));
+const DeleteForeverIcon = createSvgIcon(/* @__PURE__ */ jsxRuntimeExports.jsx("path", {
+  d: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6zm2.46-7.12 1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"
 }));
 class MediaOutputs {
   files = null;
@@ -19875,6 +20041,41 @@ function queueNodeIDs(item) {
   const ids = workflow.api_prompt ? Object.keys(workflow.api_prompt) : (workflow.nodes ?? []).map((node2) => node2.id).filter((id) => id != null);
   return Object.fromEntries(ids.map((id) => [id, id]));
 }
+const two = (n) => String(n).padStart(2, "0");
+function formatStamp(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1e3);
+  return `${two(d.getDate())}/${two(d.getMonth() + 1)} ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor(s % 3600 / 60);
+  return h > 0 ? `${h}h ${two(m)}m ${two(s % 60)}s` : `${m}m ${two(s % 60)}s`;
+}
+function RunningFor({ startedTs, estimate }) {
+  const [now, setNow] = reactExports.useState(() => Date.now() / 1e3);
+  reactExports.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now() / 1e3), 1e3);
+    return () => clearInterval(id);
+  }, []);
+  if (!startedTs) return null;
+  const elapsed = Math.max(0, now - startedTs);
+  const percent = estimate > 0 ? Math.min(99, Math.round(elapsed / estimate * 100)) : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "running-for",
+      title: estimate > 0 ? `Estimate from the median of recent runs of this workflow (${formatDuration(estimate)})` : "No completed run of this workflow yet, so no estimate",
+      children: [
+        "running for ",
+        formatDuration(elapsed),
+        percent !== null ? ` � ~${percent}% of ${formatDuration(estimate)}` : ""
+      ]
+    }
+  );
+}
 const QueueItemRow = reactExports.memo(
   function QueueItemRow2({
     item,
@@ -19898,6 +20099,10 @@ const QueueItemRow = reactExports.memo(
     const renaming = useSelectionStore((state) => !!state.rename);
     const dbId = item?.[3]?.db_id;
     const workflow = reactExports.useMemo(() => queueWorkflow(item), [item]);
+    const createdTs = item?.[3]?.created_ts;
+    const finishedTs = item?.[3]?.finished_ts;
+    const startedTs = item?.[3]?.started_ts;
+    const estimate = item?.[3]?.estimated_duration;
     const selectable = !!dbId && mode !== "running";
     const canReorder = route === "queue" || route === "archive";
     const mediaOutputs = reactExports.useMemo(() => {
@@ -19928,6 +20133,66 @@ const QueueItemRow = reactExports.memo(
         front: shiftDown === true,
         clientId
       });
+    }, [dbId]);
+    const firstFile = reactExports.useMemo(() => {
+      const files = mediaOutputs?.files;
+      if (files && files.length) return files[0];
+      return mediaOutputs?.cover ?? null;
+    }, [mediaOutputs]);
+    const openInPlayer = reactExports.useCallback(async () => {
+      if (!firstFile) return;
+      try {
+        await apiCall(`queue_manager/open_file`, {
+          id: dbId,
+          filename: firstFile.filename,
+          subfolder: firstFile.subfolder ?? ""
+        });
+      } catch (e) {
+        window.alert("Could not open the file. It may have been moved or deleted.");
+      }
+    }, [dbId, firstFile]);
+    const openFolder = reactExports.useCallback(async () => {
+      if (!firstFile) return;
+      const args = new URLSearchParams({
+        id: String(dbId),
+        filename: firstFile.filename,
+        subfolder: firstFile.subfolder ?? ""
+      });
+      await apiCall(`queue_manager/open_location?${args.toString()}`, null, "GET");
+    }, [dbId, firstFile]);
+    const purgeJob = reactExports.useCallback(async () => {
+      let preview = null;
+      try {
+        preview = await apiCall(`queue_manager/purge_preview`, { items: [dbId] });
+      } catch (e) {
+        window.alert("Could not read what would be deleted.");
+        return;
+      }
+      const job = preview?.jobs?.[0];
+      if (!job) return;
+      if (job.running) {
+        window.alert("This job is running. Cancel it first, then delete it.");
+        return;
+      }
+      const names = job.files.slice(0, 10).join("\n");
+      const more = job.total_files > 10 ? `
+...and ${job.total_files - 10} more` : "";
+      const confirmed = window.confirm(
+        `Delete "${job.name || "this job"}" for good?
+
+${job.total_files} file(s) go to the Recycle Bin and the job is removed from the queue. This cannot be undone from Queue Manager.
+
+${names}${more}`
+      );
+      if (!confirmed) return;
+      try {
+        const result = await apiCall(`queue_manager/purge`, { items: [dbId], confirm: true });
+        if (result?.failed_files) {
+          window.alert(`${result.failed_files} file(s) could not be deleted.`);
+        }
+      } catch (e) {
+        window.alert("Delete failed.");
+      }
     }, [dbId]);
     const filterByWorkflow = reactExports.useCallback(() => {
       if (!workflow || selecting) return;
@@ -19983,30 +20248,49 @@ const QueueItemRow = reactExports.memo(
                 title: "Open gallery"
               }
             ) : null }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-1 text-left name", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "name-cell", children: [
-              mediaOutputs && item[3].total_files > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "span",
-                {
-                  className: "total shiny-button",
-                  title: `Total file outputs: ${mediaOutputs.total}`,
-                  onClick: () => onMediaItemClick({ dbID: dbId, fileIndex: 0 }),
-                  children: mediaOutputs.total
-                }
-              ) : null,
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                QueueItemName,
-                {
-                  name: workflow?.workflow_name ?? "",
-                  dbId,
-                  selecting,
-                  route,
-                  canRename: !!dbId && mode !== "running" && (route === "queue" || route === "archive"),
-                  onFilter: filterByWorkflow,
-                  filterTitle: workflowFilterMode === "workflow_name" ? "Filter view by this exact workflow name" : "Filter view by the workflow",
-                  onRenamed: refreshQueueItems
-                }
-              )
-            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-1 text-left name", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "name-cell", children: [
+                mediaOutputs && item[3].total_files > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "span",
+                  {
+                    className: "total shiny-button",
+                    title: `Total file outputs: ${mediaOutputs.total}`,
+                    onClick: () => onMediaItemClick({ dbID: dbId, fileIndex: 0 }),
+                    children: mediaOutputs.total
+                  }
+                ) : null,
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  QueueItemName,
+                  {
+                    name: workflow?.workflow_name ?? "",
+                    dbId,
+                    selecting,
+                    route,
+                    canRename: !!dbId && mode !== "running" && (route === "queue" || route === "archive"),
+                    onFilter: filterByWorkflow,
+                    filterTitle: workflowFilterMode === "workflow_name" ? "Filter view by this exact workflow name" : "Filter view by the workflow",
+                    onRenamed: refreshQueueItems
+                  }
+                )
+              ] }),
+              mode === "running" || mode === "external" ? /* @__PURE__ */ jsxRuntimeExports.jsx(RunningFor, { startedTs, estimate }) : null
+            ] }),
+            route === "queue" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "td",
+              {
+                className: "px-3 py-1 text-left queued-at",
+                title: createdTs ? new Date(createdTs * 1e3).toLocaleString() : "",
+                children: formatStamp(createdTs)
+              }
+            ) : null,
+            route === "completed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "td",
+              {
+                className: "px-3 py-1 text-left finished-at",
+                title: finishedTs ? new Date(finishedTs * 1e3).toLocaleString() : "",
+                children: formatStamp(finishedTs)
+              }
+            ) : null,
             route === "completed" && /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "meta-info", children: executionTimeLabel ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "execution-time", title: "Execution time", children: executionTimeLabel }) : null }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-1 text-right actions", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { justifyContent: "flex-end" }, className: "buttons", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -20050,6 +20334,38 @@ const QueueItemRow = reactExports.memo(
                     /* @__PURE__ */ jsxRuntimeExports.jsx(PlayArrowOutlinedIcon, { fontSize: "small" }),
                     "Run"
                   ]
+                }
+              ) : null,
+              route === "completed" && firstFile ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    className: "open-player green-button shiny-button",
+                    onClick: openInPlayer,
+                    title: "Open with the system's default player",
+                    "data-selection-ignore": true,
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(PlayCircleOutlineIcon, { fontSize: "small" })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    className: "open-folder yellow-button shiny-button",
+                    onClick: openFolder,
+                    title: "Show the file in the output folder",
+                    "data-selection-ignore": true,
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderOpenIcon, { fontSize: "small" })
+                  }
+                )
+              ] }) : null,
+              route === "completed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  className: "purge red-button shiny-button",
+                  onClick: purgeJob,
+                  title: "Delete the job and its output files (Recycle Bin)",
+                  "data-selection-ignore": true,
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeleteForeverIcon, { fontSize: "small" })
                 }
               ) : null,
               route === "completed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -20096,7 +20412,7 @@ const QueueItemRow = reactExports.memo(
         {
           className: "dark:odd:bg-neutral-900 odd:bg-neutral-100 gallery" + (selected ? " selected" : ""),
           "data-selection-id": selectable ? dbId : void 0,
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx("td", { colSpan: 4, className: "px-3 py-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2 items", children: mediaOutputs?.files?.length ? mediaOutputs.files.map((file, fileIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx("td", { colSpan: 100, className: "px-3 py-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2 items", children: mediaOutputs?.files?.length ? mediaOutputs.files.map((file, fileIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx(
             MediaItem,
             {
               file,
@@ -20114,52 +20430,9 @@ const QueueItemRow = reactExports.memo(
     const prevId = prev2.item?.[3]?.db_id;
     const nextId = next2.item?.[3]?.db_id;
     if (prevId !== nextId) return false;
-    return prev2.loader === next2.loader && prev2.index === next2.index && prev2.mode === next2.mode && prev2.route === next2.route && prev2.thumbMode === next2.thumbMode && prev2.galleryOptions === next2.galleryOptions && prev2.filters === next2.filters && prev2.workflowFilterMode === next2.workflowFilterMode && prev2.selecting === next2.selecting && prev2.selected === next2.selected && prev2.reorderBusy === next2.reorderBusy && prev2.dragging === next2.dragging && prev2.reorderAnchor === next2.reorderAnchor && prev2.info?.page === next2.info?.page && prev2.info?.page_size === next2.info?.page_size && prev2.item?.[0] === next2.item?.[0] && queueWorkflow(prev2.item).workflow_name === queueWorkflow(next2.item).workflow_name && queueWorkflow(prev2.item).id === queueWorkflow(next2.item).id;
+    return prev2.item?.[3]?.created_ts === next2.item?.[3]?.created_ts && prev2.item?.[3]?.finished_ts === next2.item?.[3]?.finished_ts && prev2.item?.[3]?.started_ts === next2.item?.[3]?.started_ts && prev2.item?.[3]?.estimated_duration === next2.item?.[3]?.estimated_duration && prev2.loader === next2.loader && prev2.index === next2.index && prev2.mode === next2.mode && prev2.route === next2.route && prev2.thumbMode === next2.thumbMode && prev2.galleryOptions === next2.galleryOptions && prev2.filters === next2.filters && prev2.workflowFilterMode === next2.workflowFilterMode && prev2.selecting === next2.selecting && prev2.selected === next2.selected && prev2.reorderBusy === next2.reorderBusy && prev2.dragging === next2.dragging && prev2.reorderAnchor === next2.reorderAnchor && prev2.info?.page === next2.info?.page && prev2.info?.page_size === next2.info?.page_size && prev2.item?.[0] === next2.item?.[0] && queueWorkflow(prev2.item).workflow_name === queueWorkflow(next2.item).workflow_name && queueWorkflow(prev2.item).id === queueWorkflow(next2.item).id;
   }
 );
-const useOptionsStore = create((set) => ({
-  Basic: { ShowSelectionHints: true },
-  Completed: {
-    CoverThumbMode: "Cropped",
-    GridThumbMode: "Square Fit",
-    ListOrder: "Newest first"
-  },
-  Gallery: {},
-  thumb_mode: "cover",
-  thumb_size: 150,
-  cover_size: 50,
-  show_gallery_ui: true,
-  /**
-   * Set a single option within a category
-   */
-  setOption: (category, key, value) => set((state) => ({
-    ...state,
-    [category]: {
-      ...state[category],
-      [key]: value
-    }
-  })),
-  /**
-   * Set all options within a category
-   */
-  setOptionsCategory: (category, options) => set((state) => ({
-    ...state,
-    [category]: options
-  })),
-  /**
-   * Set all options
-   */
-  setAllOptions: (allOptions) => set(() => ({
-    ...allOptions
-  })),
-  /**
-   * Set a single option directly on the root state
-   */
-  setDirectOption: (key, value) => set((state) => ({
-    ...state,
-    [key]: value
-  }))
-}));
 function bindQueueSelectionDrag(container, store, setRectangle, suppressClick) {
   const view = container.ownerDocument.defaultView;
   let drag = null;
@@ -20681,6 +20954,8 @@ const Queue = reactExports.memo(function Queue2({ data, isLoading, error, progre
               /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-left", children: "#" }),
               route === "completed" && thumbMode === "cover" && (galleryOptions.ShowImages || galleryOptions.ShowVideos) && /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 cover", children: "Thumbnail" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-left workflow-column", children: "Workflow" }),
+              route === "queue" && /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-left", children: "Queued" }),
+              route === "completed" && /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-left", children: "Finished" }),
               route === "completed" && /* @__PURE__ */ jsxRuntimeExports.jsx("th", {}),
               /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-left", children: selecting ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "selection-heading", "data-selection-ignore": true, children: [
                 "Actions",
@@ -30348,7 +30623,7 @@ function SplashScreen({ onClick }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Bugfixes" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "list-disc pl-5 space-y-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Fixed empty image or GIF output lists crashing job completion and stopping further prompt execution." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Restored Pause/Resume and Clear pending buttons on ComfyUI 0.41 through its compatibility menu API." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Restored Pause/Resume and Clear pending buttons on ComfyUI 0.41 after the toolbar refactor." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),

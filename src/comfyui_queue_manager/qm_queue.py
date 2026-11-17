@@ -1,4 +1,5 @@
 import threading
+import time
 from typing import Optional
 
 from execution import PromptQueue
@@ -14,6 +15,8 @@ from .qm_db import get_conn, read_query, read_single, write_query, write_many
 from .qm_log import qm_log
 from .nodes import resolve_workflow_name
 from .queue_metadata import prepare_queue_item, queue_metadata, rename_queue_item
+from .qm_files import QM_Files
+from .qm_order import QM_Order
 
 
 class QM_Queue:
@@ -21,6 +24,15 @@ class QM_Queue:
         self.queue_manager = queue_manager
         self.user_manager = PromptServer.instance.user_manager
         self.restored = False
+
+        # prompt_id -> epoch seconds when the job actually started executing. In memory on
+        # purpose: a running job does not survive a restart either (restore_queue puts it
+        # back in the pending queue).
+        self.started_at = {}
+
+        # workflow_id -> (cached at, median execution time). Recomputed at most once a
+        # minute, since the queue view is polled on every status event.
+        self.estimate_cache = {}
 
         settings = self.user_manager.settings.get_settings(None)
         start_mode = settings.get("QueueManager.Basic.StartMode", "Last state")
@@ -77,6 +89,12 @@ class QM_Queue:
         self.original_task_done = self.native_queue.task_done
         self.native_queue.task_done = self.task_done
 
+        # FIFO / LIFO submit mode, inverting the queue and grouping jobs by model.
+        self.order = QM_Order(self)
+
+        # Output file actions: open with the default application, delete for good.
+        self.files = QM_Files(self)
+
     # NOTE: This hijack will make native queue API endpoint to not return pending items.
     # We do this to avoid bottleneck in the native queue when it goes massive
     # and to avoid duplicate bandwidth for requesting queue by execution store and queue manager.
@@ -92,11 +110,15 @@ class QM_Queue:
             last_page = 0
             order_string = "ORDER BY number, queue.id"
             join_string = ""
-            select_string = "SELECT queue.id as id, prompt, number"
+            # Timestamps travel as epoch seconds: SQLite's CURRENT_TIMESTAMP is UTC with
+            # no zone marker, which the browser would otherwise read as local time.
+            select_string = (
+                "SELECT queue.id as id, prompt, number, CAST(strftime('%s', queue.created_at) AS INTEGER) as created_ts"
+            )
 
             match route:
                 case "queue":
-                    running.extend(self.native_queue.currently_running.values())
+                    running.extend(self.decorate_running(self.native_queue.currently_running.values()))
                 case "archive":
                     order_string = f"ORDER BY {self._archive_order()}"
                 case "completed":
@@ -108,6 +130,7 @@ class QM_Queue:
                     join_string = "LEFT JOIN meta as outputs ON queue.id = outputs.item_id AND outputs.key = 'outputs'"
                     join_string += " LEFT JOIN meta as exec_time ON queue.id = exec_time.item_id AND exec_time.key = 'execution_time'"
                     select_string = f"{select_string}, outputs.value as outputs, exec_time.value as execution_time"
+                    select_string += ", CAST(strftime('%s', queue.updated_at) AS INTEGER) as finished_ts"
 
             where_clauses = [self.get_route_query(route)]
 
@@ -155,11 +178,14 @@ class QM_Queue:
                     item = json.loads(row["prompt"])
                     # Add db_id to the item
                     item[3]["db_id"] = row["id"]
+                    item[3]["created_ts"] = row["created_ts"]  # when the job was queued
 
                     if route == "queue":
                         item[0] = row["number"]  # set the number to the one from the database
 
                     if route == "completed":
+                        item[3]["finished_ts"] = row["finished_ts"]  # when the job finished
+
                         if row["outputs"] is not None:
                             # If we have outputs then add them to the item
                             item[3]["outputs"] = json.loads(row["outputs"])
@@ -254,6 +280,7 @@ class QM_Queue:
             item = self.native_queue.currently_running.get(item_id, None)
             if item is not None:
                 prompt_id = item[1]  # Get the prompt_id from the item
+                self.started_at.pop(prompt_id, None)
                 # Mark the item as finished in the database
                 write_query(
                     """
@@ -352,6 +379,15 @@ class QM_Queue:
             item = prepare_queue_item(item)
             metadata = queue_metadata(item)
 
+            # LIFO: the newest job has to run first. A negative number sorts before any
+            # positive one (the scheme the native "front" / shift+Run already uses) and,
+            # since the server's job counter only grows, each new LIFO job also sorts
+            # before the previous one.
+            lifo = self.order.submit_order() == "LIFO"
+            if lifo:
+                item = list(item)
+                item[0] = -(abs(int(item[0])) + 1)
+
             # Add the item to the database
             write_query(
                 """
@@ -369,12 +405,18 @@ class QM_Queue:
 
             # qm_log.info("Workflow queued: %s at %s", item[1], item[0])
 
+            if lifo:
+                # This job is now the best candidate, so replace whatever was pre-fetched.
+                self.refresh_prefetch()
+                PromptServer.instance.queue_updated()
+                return
+
             # Is there's no pending item in the native heap nd we are not paused then add item with highest priority (could be this one)
             if len(self.native_queue.queue) == 0 and not self.paused:
                 # get item from database which has highest priority and higher than this
                 item = read_single(
                     """
-                    SELECT number, prompt, updated_at
+                    SELECT number, prompt, created_at
                     FROM queue
                     WHERE status = 0 AND number <= ?
                     ORDER BY number, id
@@ -407,7 +449,7 @@ class QM_Queue:
 
                 # Get the item with highest priority from the queue in database
                 item_db = read_single("""
-                    SELECT number, prompt, updated_at
+                    SELECT number, prompt, created_at
                     FROM queue
                     WHERE status = 0
                     ORDER BY number, id
@@ -431,6 +473,7 @@ class QM_Queue:
                 """,
                     (queue_item[0][1],),
                 )
+                self.started_at[queue_item[0][1]] = time.time()
                 qm_log.info(
                     "Executing workflow: \033[33m%s\033[0m at %s",
                     queue_metadata(queue_item[0])["name"],
@@ -449,11 +492,116 @@ class QM_Queue:
         # Saved prompt[0] can predate a reorder, archive replay or restoration.
         item = json.loads(row["prompt"])
         item[0] = row["number"]
-        if self.takeover_client and self.takeover_client["timestamp"] > row["updated_at"]:
+        # Compare against created_at (when the job was queued) where it is available:
+        # reordering rewrites `number`, which bumps updated_at, and the job would then
+        # silently lose the takeover client.
+        queued_at = row["created_at"] if "created_at" in row.keys() else row["updated_at"]
+        if self.takeover_client and self.takeover_client["timestamp"] > queued_at:
             item[3]["client_id"] = self.takeover_client["client_id"]
         if len(item) < 6:
             item.append({})
         return tuple(item)
+
+    # Attach timestamps and a duration estimate to the running jobs. They come from
+    # ComfyUI's own dictionary and carry no database columns, so they are copied first,
+    # to leave that dictionary untouched.
+    def decorate_running(self, items):
+        decorated = []
+
+        for item in items:
+            item = list(item)
+            extra = dict(item[3]) if isinstance(item[3], dict) else {}
+            prompt_id = item[1]
+
+            row = read_single(
+                """
+                SELECT id, workflow_id, CAST(strftime('%s', created_at) AS INTEGER) as created_ts
+                FROM queue
+                WHERE prompt_id = ?
+            """,
+                (prompt_id,),
+            )
+
+            if row is not None:
+                extra["db_id"] = row["id"]
+                extra["created_ts"] = row["created_ts"]
+                extra["estimated_duration"] = self.estimate_duration(row["workflow_id"])
+
+            started = self.started_at.get(prompt_id)
+            if started is not None:
+                extra["started_ts"] = int(started)
+
+            item[3] = extra
+            decorated.append(tuple(item))
+
+        return decorated
+
+    # Median execution time of the last few completed jobs of the same workflow, used by
+    # the UI for a time based progress estimate. Counting executed nodes says very little
+    # for video jobs, where a single node takes nearly all of the time.
+    def estimate_duration(self, workflow_id, sample=20, cache_seconds=60):
+        if not workflow_id:
+            return None
+
+        cached = self.estimate_cache.get(workflow_id)
+        if cached is not None and (time.time() - cached[0]) < cache_seconds:
+            return cached[1]
+
+        rows = read_query(
+            """
+            SELECT meta.value as execution_time
+            FROM queue
+            JOIN meta ON meta.item_id = queue.id AND meta.key = 'execution_time'
+            WHERE queue.status = 2 AND queue.workflow_id = ?
+            ORDER BY queue.updated_at DESC
+            LIMIT ?
+        """,
+            (workflow_id, sample),
+        )
+
+        times = []
+        for row in rows:
+            try:
+                times.append(float(row[0]))
+            except (TypeError, ValueError):
+                continue
+
+        if not times:
+            self.estimate_cache[workflow_id] = (time.time(), None)
+            return None
+
+        times.sort()
+        middle = len(times) // 2
+        median = times[middle] if len(times) % 2 else (times[middle - 1] + times[middle]) / 2
+        median = round(median, 3)
+
+        self.estimate_cache[workflow_id] = (time.time(), median)
+        return median
+
+    # Drop the pre-fetched pending job (if any) and push the current best one, so a change
+    # of order takes effect on the very next execution instead of after the job that was
+    # already pre-fetched. The dropped job is still status 0 in the database (it is marked
+    # as running only once the worker pops it), so nothing is lost.
+    def refresh_prefetch(self):
+        with self.native_queue.mutex:
+            self.native_queue.queue = []
+
+            if self.paused:
+                return
+
+            row = read_single("""
+                SELECT number, prompt, created_at
+                FROM queue
+                WHERE status = 0
+                ORDER BY number, id
+                LIMIT 1
+            """)
+
+            if row is None:
+                return
+
+            heapq.heappush(self.native_queue.queue, self._pending_prompt(row))
+            self.native_queue.not_empty.notify()
 
     @staticmethod
     def _archive_order(reverse=False):

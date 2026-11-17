@@ -123,6 +123,12 @@ export const Queue = memo(function Queue({ data, isLoading, error, progress }) {
                 <th className="px-3 py-2 text-left workflow-column">
                   Workflow
                 </th>
+                {route === "queue" && (
+                  <th className="px-3 py-2 text-left">Queued</th>
+                )}
+                {route === "completed" && (
+                  <th className="px-3 py-2 text-left">Finished</th>
+                )}
                 {route === "completed" &&
                   <th></th>
                 }

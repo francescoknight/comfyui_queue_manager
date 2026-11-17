@@ -1,5 +1,23 @@
 # Release Notes
 
+## v0.2.1+scenegp.1 (private fork)
+
+### New features
+- FIFO / LIFO submit mode for newly queued jobs.
+- Group pending jobs by the models / LoRAs they load, to cut model loading time.
+- Invert the pending queue order.
+- Queued and Finished timestamp columns.
+- Elapsed time and a completion estimate for the running job, from the median runtime of recent runs of the same workflow.
+- Open a completed job's output with the system default player, or show it in the output folder.
+- Delete a job together with its output files (Recycle Bin, with confirmation).
+
+### Bugfixes
+- The takeover client was silently lost by a reordered job, because the check compared against `updated_at`, which reordering bumps. It now compares against `created_at`.
+
+See [FORK.md](FORK.md).
+
+---
+
 ## v0.2.1
 
 _Oct 18, 2026_

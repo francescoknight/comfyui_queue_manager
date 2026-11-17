@@ -186,6 +186,60 @@ class QM_Server:
             else:
                 return web.json_response({"error": "No item to play"}, status=400)
 
+        # Reverse the pending queue: the last job becomes the first
+        @PromptServer.instance.routes.post("/queue_manager/invert")
+        async def invert_queue(request):
+            return web.json_response(self.queue.order.invert_order())
+
+        # Group pending jobs by the models / LoRAs they load, to save model loading time
+        @PromptServer.instance.routes.post("/queue_manager/optimize")
+        async def optimize_queue(request):
+            return web.json_response(self.queue.order.optimize_order())
+
+        # Open one of a job's output files with the system's default application
+        @PromptServer.instance.routes.post("/queue_manager/open_file")
+        async def open_output_file(request):
+            json_data = await requestJson(request)
+
+            db_id = json_data.get("id", None)
+            if db_id is None:
+                return web.json_response({"error": "No job given"}, status=400)
+
+            result = self.queue.files.open_file(
+                db_id,
+                json_data.get("filename", ""),
+                json_data.get("subfolder", ""),
+            )
+
+            return web.json_response(result, status=200 if result.get("opened") else 400)
+
+        # What a purge would delete. Feeds the confirmation dialog.
+        @PromptServer.instance.routes.post("/queue_manager/purge_preview")
+        async def purge_preview(request):
+            json_data = await requestJson(request)
+
+            items = json_data.get("items", None)
+            if not items or not isinstance(items, list):
+                return web.json_response({"error": "No items"}, status=400)
+
+            return web.json_response(self.queue.files.preview_purge(items))
+
+        # Delete jobs together with their output files. Requires an explicit confirmation.
+        @PromptServer.instance.routes.post("/queue_manager/purge")
+        async def purge_jobs(request):
+            json_data = await requestJson(request)
+
+            items = json_data.get("items", None)
+            if not items or not isinstance(items, list):
+                return web.json_response({"error": "No items"}, status=400)
+
+            if json_data.get("confirm", False) is not True:
+                return web.json_response({"error": "Not confirmed"}, status=400)
+
+            return web.json_response(
+                self.queue.files.purge_items(items, json_data.get("permanent", False) is True)
+            )
+
         # Endpoint to expose __version__ information
         @PromptServer.instance.routes.get("/queue_manager/version")
         async def get_version(request):
@@ -337,6 +391,7 @@ class QM_Server:
             "queue_paused": False,
             "splash_screen": "0.0.0",  # last seen splash screen version
             "show_gallery_ui": True,
+            "submit_order": "FIFO",  # FIFO or LIFO: where a newly queued job lands
         }
 
         # Get options
@@ -400,6 +455,9 @@ class QM_Server:
             elif option == "queue_paused" or option == "show_gallery_ui":
                 if not isinstance(value, bool):
                     return web.json_response({"error": "Invalid " + option + " value"}, status=400)
+            elif option == "submit_order":
+                if value not in ["FIFO", "LIFO"]:
+                    return web.json_response({"error": "Invalid submit_order value"}, status=400)
             elif (
                 option == "splash_screen"
             ):  # splash_screen we always set to current version (indication that user has seen the latest splash)
